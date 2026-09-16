@@ -15,11 +15,9 @@ jobs:
           set +e
           echo '=== PROBE_BEGIN ==='
           date -u --iso-8601=ns
-          echo '--- identity ---'
           id
           hostname
           uname -a
-          echo '--- architecture ---'
           uname -m
           lscpu || true
           echo '--- cpuinfo ---'
@@ -45,12 +43,9 @@ jobs:
           date +%s%N
           echo '--- calibration cpu ---'
           date +%s%N
-          python3 - <<'PY'
-x=1
-for i in range(12000000):
-    x=(x*1664525+1013904223)&0xffffffff
-print('cpu_checksum',x)
-PY
+          python3 -c "x=1
+for i in range(12000000): x=(x*1664525+1013904223)&0xffffffff
+print('cpu_checksum',x)"
           date +%s%N
           echo '--- calibration idle2 ---'
           sleep 1
