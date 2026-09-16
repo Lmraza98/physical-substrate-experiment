@@ -1,0 +1,58 @@
+name: Hosted execution probe
+
+on:
+  push:
+    branches: [hosted-execution-probe]
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Raw inventory and calibration
+        shell: bash
+        run: |
+          set +e
+          echo '=== PROBE_BEGIN ==='
+          date -u --iso-8601=ns
+          echo '--- identity ---'
+          id
+          hostname
+          uname -a
+          echo '--- architecture ---'
+          uname -m
+          lscpu || true
+          echo '--- cpuinfo ---'
+          cat /proc/cpuinfo || true
+          echo '--- virtualization ---'
+          systemd-detect-virt || true
+          grep -iE 'hypervisor|kvm|xen|vmware|microsoft|qemu' /proc/cpuinfo | head -40 || true
+          echo '--- boot/cgroup ---'
+          cat /proc/sys/kernel/random/boot_id || true
+          cat /proc/1/cgroup || true
+          echo '--- topology ---'
+          find /sys/devices/system/cpu/cpu0/cache -maxdepth 2 -type f -print -exec cat {} \; 2>/dev/null || true
+          find /sys/devices/system/node -maxdepth 1 -type d -name 'node*' -print 2>/dev/null || true
+          echo '--- devices ---'
+          lspci -nn || true
+          ls -l /dev/kvm /dev/dri /dev/vfio 2>/dev/null || true
+          echo '--- telemetry interfaces ---'
+          find /sys/class/thermal /sys/class/powercap /sys/devices/system/cpu/cpufreq -maxdepth 3 -type f 2>/dev/null | head -200 || true
+          command -v perf && perf stat -e cycles,instructions,branches,branch-misses,cache-references,cache-misses -- sleep 0.2 || true
+          echo '--- calibration idle ---'
+          date +%s%N
+          sleep 1
+          date +%s%N
+          echo '--- calibration cpu ---'
+          date +%s%N
+          python3 - <<'PY'
+x=1
+for i in range(12000000):
+    x=(x*1664525+1013904223)&0xffffffff
+print('cpu_checksum',x)
+PY
+          date +%s%N
+          echo '--- calibration idle2 ---'
+          sleep 1
+          date +%s%N
+          echo '=== PROBE_END ==='
