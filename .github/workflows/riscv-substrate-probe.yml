@@ -1,0 +1,81 @@
+name: RISC-V substrate probe
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04-riscv
+    timeout-minutes: 10
+    steps:
+      - name: Substrate identity and instrumentation probe
+        shell: bash
+        run: |
+          set -u
+          echo '=== identity ==='
+          id || true
+          hostname || true
+          uname -a || true
+
+          echo '=== architecture / CPU ==='
+          lscpu || true
+          cat /proc/cpuinfo || true
+          command -v riscv_hwprobe >/dev/null && riscv_hwprobe || true
+
+          echo '=== kernel / boot ==='
+          cat /proc/sys/kernel/random/boot_id || true
+          cat /proc/cmdline || true
+
+          echo '=== topology ==='
+          find /sys/devices/system/cpu/cpu0/cache -maxdepth 2 -type f -readable -print -exec cat {} \; 2>/dev/null || true
+          command -v numactl >/dev/null && numactl --hardware || true
+
+          echo '=== device tree ==='
+          if [ -d /sys/firmware/devicetree/base ]; then
+            find /sys/firmware/devicetree/base -maxdepth 2 -type f -readable 2>/dev/null | head -100
+            for f in compatible model; do
+              [ -r /sys/firmware/devicetree/base/$f ] && { echo "--- $f"; tr '\0' '\n' < /sys/firmware/devicetree/base/$f; }
+            done
+          fi
+
+          echo '=== virtualization / container ==='
+          systemd-detect-virt || true
+          cat /proc/1/cgroup || true
+          grep -Ei 'hypervisor|qemu|kvm|virt|docker|container|kubernetes' /proc/cpuinfo /proc/1/cgroup 2>/dev/null || true
+
+          echo '=== PMU ==='
+          cat /proc/sys/kernel/perf_event_paranoid 2>/dev/null || true
+          ls -la /sys/bus/event_source/devices 2>/dev/null || true
+          command -v perf || true
+          perf stat -e cycles,instructions,branches,branch-misses,cache-references,cache-misses true 2>&1 || true
+
+          echo '=== frequency ==='
+          find /sys/devices/system/cpu -path '*cpufreq*' -type f -readable -maxdepth 7 -print -exec cat {} \; 2>/dev/null || true
+
+          echo '=== thermal ==='
+          for f in /sys/class/thermal/thermal_zone*/temp; do [ -r "$f" ] && echo "$f=$(cat "$f")"; done
+
+          echo '=== power / energy ==='
+          find /sys/class/powercap -maxdepth 4 -type f -readable -print -exec cat {} \; 2>/dev/null || true
+
+          echo '=== PCI / devices ==='
+          command -v lspci >/dev/null && lspci -nn || true
+          ls -la /dev 2>/dev/null | head -100 || true
+
+          echo '=== calibration: idle -> CPU -> idle ==='
+          date +%s%N
+          sleep 2
+          date +%s%N
+          python3 - <<'PY'
+          import time
+          x = 1
+          t = time.monotonic()
+          while time.monotonic() - t < 3.0:
+              x = (x * 1664525 + 1013904223) & 0xffffffff
+          print('cpu_control', x)
+          PY
+          date +%s%N
+          sleep 2
+          date +%s%N
