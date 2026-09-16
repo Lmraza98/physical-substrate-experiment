@@ -1,9 +1,7 @@
 name: Hosted execution probe
-
 on:
   push:
     branches: [hosted-execution-probe]
-
 jobs:
   inventory:
     runs-on: ubuntu-latest
@@ -43,9 +41,7 @@ jobs:
           date +%s%N
           echo '--- calibration cpu ---'
           date +%s%N
-          python3 -c "x=1
-for i in range(12000000): x=(x*1664525+1013904223)&0xffffffff
-print('cpu_checksum',x)"
+          python3 -c "x=sum((i*i)&0xffffffff for i in range(12000000)); print('cpu_checksum',x&0xffffffff)"
           date +%s%N
           echo '--- calibration idle2 ---'
           sleep 1
